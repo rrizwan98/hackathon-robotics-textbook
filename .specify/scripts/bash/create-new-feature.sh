@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -e
+>&2 echo "Script started!"
 
 JSON_MODE=false
 SHORT_NAME=""
@@ -40,13 +41,27 @@ while [ $i -le $# ]; do
             fi
             BRANCH_NUMBER="$next_arg"
             ;;
+        --file)
+            if [ $((i + 1)) -gt $# ]; then
+                echo 'Error: --file requires a value' >&2
+                exit 1
+            fi
+            i=$((i + 1))
+            next_arg="${!i}"
+            if [[ "$next_arg" == --* ]]; then
+                echo 'Error: --file requires a value' >&2
+                exit 1
+            fi
+            FEATURE_FILE="$next_arg"
+            ;;
         --help|-h) 
-            echo "Usage: $0 [--json] [--short-name <name>] [--number N] <feature_description>"
+            echo "Usage: $0 [--json] [--short-name <name>] [--number N] [--file <path>] <feature_description>"
             echo ""
             echo "Options:"
             echo "  --json              Output in JSON format"
             echo "  --short-name <name> Provide a custom short name (2-4 words) for the branch"
             echo "  --number N          Specify branch number manually (overrides auto-detection)"
+            echo "  --file <path>       Read feature description from a file"
             echo "  --help, -h          Show this help message"
             echo ""
             echo "Examples:"
@@ -61,9 +76,17 @@ while [ $i -le $# ]; do
     i=$((i + 1))
 done
 
-FEATURE_DESCRIPTION="${ARGS[*]}"
+if [ -n "$FEATURE_FILE" ]; then
+    if [ ! -f "$FEATURE_FILE" ]; then
+        echo "Error: Feature description file not found: $FEATURE_FILE" >&2
+        exit 1
+    fi
+    FEATURE_DESCRIPTION=$(cat "$FEATURE_FILE")
+else
+    FEATURE_DESCRIPTION="${ARGS[*]}"
+fi
 if [ -z "$FEATURE_DESCRIPTION" ]; then
-    echo "Usage: $0 [--json] [--short-name <name>] [--number N] <feature_description>" >&2
+    echo "Usage: $0 [--json] [--short-name <name>] [--number N] [--file <path>] <feature_description>" >&2
     exit 1
 fi
 
