@@ -8,3 +8,6 @@ fastapi
 uvicorn
 httpx
 openai-chatkit
+asyncpg
+sqlalchemy[asyncio]
+psycopg2-binary

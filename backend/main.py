@@ -1,8 +1,10 @@
 # backend/main.py
 import uvicorn
 import uuid
+import os
 from datetime import datetime
 from typing import AsyncIterator, Any
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse, Response
@@ -11,7 +13,13 @@ from pydantic import BaseModel
 from typing import Optional
 
 from backend.src.agents.textbook_agent import run_agent_async
-from backend.src.chatkit_store import InMemoryStore
+from backend.src.postgres_store import PostgreSQLStore
+
+# Neon PostgreSQL Database URL
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://neondb_owner:npg_YnMftjp19BIH@ep-hidden-resonance-ahue1b4u-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require"
+)
 
 # Import ChatKit Server components
 try:
@@ -30,55 +38,20 @@ except ImportError:
     print("Warning: chatkit package not installed. ChatKit endpoint will not be available.")
 
 
-app = FastAPI(
-    title="Textbook Agent API",
-    description="API for querying the Textbook Agent about Physical AI, Humanoid Robotics, and ROS2.",
-    version="1.0.0",
-)
-
-# Add CORS middleware for frontend communication
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-class QueryRequest(BaseModel):
-    query: str
-    textbook_name: Optional[str] = None
-
-
-# ============== Original Chat Endpoint ==============
-
-@app.post("/chat")
-async def chat_with_agent(request: QueryRequest):
-    """
-    Chat with the Textbook Agent (simple JSON endpoint).
-    """
-    try:
-        agent_query = request.query
-        if request.textbook_name:
-            agent_query = f"{request.query} --textbook {request.textbook_name}"
-        
-        response = await run_agent_async(agent_query)
-        return {"response": response}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-# ============== OpenAI ChatKit Server ==============
-
 # Valid textbook sections available for chat
 VALID_TEXTBOOK_SECTIONS = [
     "Introduction to Physical AI & Humanoid Robotics",
     "Robot Operating System 2 (ROS2)"
 ]
 
+
+# Global store for ChatKit (initialized on startup)
+chatkit_store: PostgreSQLStore | None = None
+chatkit_server = None
+
+
+# Define TextbookChatKitServer early so it can be used in lifespan
 if CHATKIT_AVAILABLE:
-    
     class TextbookChatKitServer(ChatKitServer):
         """ChatKit Server that integrates with our Textbook Agent."""
         
@@ -183,10 +156,74 @@ if CHATKIT_AVAILABLE:
             yield ThreadItemDoneEvent(type="thread.item.done", item=assistant_msg)
 
 
-    # Initialize ChatKit Store and Server
-    chatkit_store = InMemoryStore()
-    chatkit_server = TextbookChatKitServer(chatkit_store)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown."""
+    global chatkit_store, chatkit_server
+    
+    # Startup: Initialize PostgreSQL store
+    if CHATKIT_AVAILABLE:
+        print(f"[Startup] Connecting to PostgreSQL database...")
+        chatkit_store = PostgreSQLStore(DATABASE_URL)
+        await chatkit_store.initialize()
+        print(f"[Startup] PostgreSQL connection established!")
+        
+        # Initialize ChatKit server with the store
+        chatkit_server = TextbookChatKitServer(chatkit_store)
+        print("[Startup] ChatKit server initialized with PostgreSQL store for persistent sessions!")
+    
+    yield
+    
+    # Shutdown: Close PostgreSQL connection
+    if chatkit_store:
+        print("[Shutdown] Closing PostgreSQL connection...")
+        await chatkit_store.close()
+        print("[Shutdown] PostgreSQL connection closed.")
 
+
+app = FastAPI(
+    title="Textbook Agent API",
+    description="API for querying the Textbook Agent about Physical AI, Humanoid Robotics, and ROS2.",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Add CORS middleware for frontend communication
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins for development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+class QueryRequest(BaseModel):
+    query: str
+    textbook_name: Optional[str] = None
+
+
+# ============== Original Chat Endpoint ==============
+
+@app.post("/chat")
+async def chat_with_agent(request: QueryRequest):
+    """
+    Chat with the Textbook Agent (simple JSON endpoint).
+    """
+    try:
+        agent_query = request.query
+        if request.textbook_name:
+            agent_query = f"{request.query} --textbook {request.textbook_name}"
+        
+        response = await run_agent_async(agent_query)
+        return {"response": response}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============== OpenAI ChatKit API Endpoints ==============
+
+if CHATKIT_AVAILABLE:
 
     @app.post("/chatkit")
     async def chatkit_endpoint(request: Request):
