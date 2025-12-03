@@ -16,11 +16,15 @@ links:
   adr: null
   pr: https://github.com/rrizwan98/hackathon-robotics-textbook/pull/2
 files:
+- .env
+- backend/data/embeddings.json
+- backend/data/gemini_files.json
 - backend/requirements.txt
 - backend/src/scripts/embed_textbook_gemini.py
 - backend/src/scripts/upload_textbook_files_gemini.py
 - backend/tests/test_gemini_file_api.py
-- backend/data/gemini_files.json
+- history/prompts/001-textbook-ai-portal/0008-add-initial-english-and-urdu-textbook-content.green.prompt.md
+- history/prompts/001-textbook-ai-portal/0009-implement-gemini-file-api-for-embeddings.green.prompt.md
 tests:
 - backend/tests/test_gemini_file_api.py
 ---
@@ -37,29 +41,70 @@ Context:
 
 Tasks:
 
-1. Create an embedding script inside `backend/src/`, e.g.:
-   `scripts/embed_textbook_gemini.py`
+1. Create a script in the backend to upload the 2 chapter files via Gemini File API, e.g.:
+   - File: backend/src/scripts/upload_textbook_files_gemini.py
 
-2. The script should:
-   a. Load all Markdown files from the book docs directory (`frontend/site/docs/`) — or wherever the final book markdown lives.
-   b. For each file:
-      - Extract text content (e.g. full text, or split into chunks if desired).
-      - (Optional) Attach metadata: file path, chapter, section.
+   The script should:
+   - Initialize a Gemini client using the existing API key.
+   - Upload the two Markdown files using client.files.upload(...), with:
+     - display_name = the chapter title
+     - mime_type = "text/markdown"
+   - Collect the returned file references (file.name or equivalent ID).
+   - Save these references into a local JSON file, e.g.:
+     backend/data/gemini_files.json
+     Structure example:
+     [
+       {
+         "path": "frontend/site/docs/introduction-physical-ai.md",
+         "display_name": "Introduction to Physical AI & Humanoid Robotics",
+         "file_name": "<gemini-file-id-1>"
+       },
+       {
+         "path": "frontend/site/docs/ros2.md",
+         "display_name": "Robot Operating System 2 (ROS2)",
+         "file_name": "<gemini-file-id-2>"
+       }
+     ]
 
-3. Use Gemini embedding model `"gemini-embedding-001"` to compute embeddings for each text (or chunk).  
-   - Use your configured Gemini credentials / API keys.  
-   - Ensure consistency: same model, same parameters.
+2. Create a small test script (or pytest test) to run a simple QA call on one of the uploaded files, e.g.:
+   - File: backend/tests/test_gemini_file_api.py
 
-4. Store embeddings temporarily (e.g. in a local JSON or pickle file) — purely for testing; **do not persist to any external DB**.  
-   Example file: `backend/data/embeddings.json`  
-   The structure can be:
-   ```json
-   {
-     "path/to/chapter1.md": embedding_vector_1,
-     "path/to/chapter2.md": embedding_vector_2,
-     ...
-   }
-I'ready saved the gemini api key in .env file in root you can move it to backend folder. or any where where you can use
+   The test should:
+   - Load backend/data/gemini_files.json.
+   - Pick the "Introduction to Physical AI & Humanoid Robotics" file entry.
+   - Call client.models.generate_content(...) with:
+     - model = "gemini-2.5-flash-lite"
+     - contents = [
+         "<a clear question about that chapter>",
+         client.files.get(name=<file_name_from_json>)
+       ]
+     (Pattern similar to the File API example:
+       "What should I do before I start writing, when following these guidelines?",
+       md_file
+     )
+   - Print the response text to the console.
+   - Assert that the response text is non-empty (basic correctness check).
+
+3. Add basic comments in both scripts explaining:
+   - How to run the upload script (e.g. `python backend/src/scripts/upload_textbook_files_gemini.py`)
+   - How to run the test (e.g. `pytest backend/tests/test_gemini_file_api.py`)
+
+Constraints:
+- Do NOT introduce any FastAPI endpoints in this step.
+- Do NOT call the Gemini embedding model.
+- Do NOT integrate any vector store or database; only use the File API and local JSON to hold file IDs.
+- Only touch backend scripts/tests needed for this File API flow.
+
+Output / Success Criteria:
+- A working upload script that successfully uploads the two chapter files to Gemini File API and writes gemini_files.json with their file IDs.
+- A working test that:
+  - Reads gemini_files.json
+  - Calls gemini-2.5-flash-lite with a question + the file reference
+  - Receives a meaningful answer (non-empty response text).
+- No changes to FastAPI or frontend in this step.
+
+After this step is complete:
+- STOP. Wait for manual review before moving to any RAG agent or API integration steps.
 
 ## Response snapshot
 
@@ -74,14 +119,7 @@ Summary of changes for Task 4 (UPDATED EMBEDDING FLOW):
 ## Outcome
 
 - ✅ Impact: Successfully implemented and tested the Gemini File API flow for uploading textbook content and running QA queries.
-- 🧪 Tests: pytest backend/tests/test_gemini_file_api.py passed.
-- 📁 Files: Created backend scripts and tests for Gemini File API. Modified previous embedding script. Generated gemini_files.json.
+- 🧪 Tests: `pytest backend/tests/test_gemini_file_api.py` passed.
+- 📁 Files: Created backend scripts and tests for Gemini File API. Modified previous embedding script. Generated `gemini_files.json`.
 - 🔁 Next prompts: Proceed with next implementation step or integrate with other components.
-- 🧠 Reflection: Encountered several issues with the google-generativeai library's API for File Upload and Client instantiation, requiring multiple iterations and debugging with context7 to find the correct usage. Also faced Gemini API quota limits, leading to a revised plan for processing fewer files.
-
-## Evaluation notes (flywheel)
-
-- Failure modes observed: Incorrect API usage, Gemini API quota limits.
-- Graders run and results (PASS/FAIL): PASS
-- Prompt variant (if applicable): null
-- Next experiment (smallest change to try): null
+- 🧠 Reflection: Encountered several issues with the `google-generativeai` library's API for File Upload and Client instantiation, requiring multiple iterations and debugging with `context7` to find the correct usage. Also faced Gemini API quota limits initially, which led to a revised plan for processing fewer files using the File API. All issues were resolved, leading to a successful implementation of this step.

@@ -2,9 +2,14 @@
 
 import os
 import json
+import warnings
 import pytest
 from google import genai
 from dotenv import load_dotenv
+
+# Suppress deprecation warnings from dependencies
+warnings.filterwarnings("ignore", category=PendingDeprecationWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -67,11 +72,11 @@ def test_qa_against_intro_chapter(gemini_files_data):
             ]
         )
         response_text = response.text
-        print(f"\n{'='*80}")
+        print(f"\n{'='*200}")
         print(f"AI Response:")
-        print(f"{'='*80}")
+        print(f"{'='*200}")
         print(response_text)
-        print(f"{'='*80}\n")
+        print(f"{'='*200}\n")
 
         assert response_text.strip() != "", "Response text should not be empty."
 
