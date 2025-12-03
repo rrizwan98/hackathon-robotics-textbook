@@ -1,0 +1,13 @@
+python-dotenv
+google-generativeai
+pytest
+pytest-asyncio
+openai-agents
+litellm
+fastapi
+uvicorn
+httpx
+openai-chatkit
+asyncpg
+sqlalchemy[asyncio]
+psycopg2-binary
