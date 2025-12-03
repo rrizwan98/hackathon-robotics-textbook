@@ -12,8 +12,8 @@ This agent can:
 import os
 from dotenv import load_dotenv
 from agents import Agent, Runner, set_default_openai_client
-from openai import AsyncOpenAI
 from agents.extensions.models.litellm_model import LitellmModel
+from openai import AsyncOpenAI
 
 import litellm
 

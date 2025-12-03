@@ -58,6 +58,10 @@ def list_available_textbooks() -> str:
 
 @function_tool
 def query_textbook(question: str, textbook_name: str = None) -> str:
+    print(f"\n--- Tool Call: query_textbook ---")
+    print(f"  Question: {question}")
+    print(f"  Textbook Name: {textbook_name}")
+    print(f"-----------------------------------\n")
     """
     Query a specific textbook or all textbooks with a question.
     Uses Gemini API to answer questions based on the uploaded textbook content.
@@ -125,6 +129,9 @@ def query_textbook(question: str, textbook_name: str = None) -> str:
 
 @function_tool
 def get_textbook_summary(textbook_name: str = None) -> str:
+    print(f"\n--- Tool Call: get_textbook_summary ---")
+    print(f"  Textbook Name: {textbook_name}")
+    print(f"---------------------------------------\n")
     """
     Get a summary of a specific textbook or all textbooks.
     
