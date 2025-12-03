@@ -1,52 +1,106 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ChatKit, useChatKit } from '@openai/chatkit-react';
 import type { ChatKitOptions } from '@openai/chatkit-react';
 import styles from './styles.module.css';
 
 /**
+ * Mapping of URL paths to exact section names (as defined in backend VALID_TEXTBOOK_SECTIONS)
+ */
+const URL_TO_SECTION_NAME: Record<string, string> = {
+  'intro': 'Introduction to Physical AI & Humanoid Robotics',
+  'ros2': 'Robot Operating System 2 (ROS2)',
+};
+
+/**
  * Get the current textbook section name from the page
+ * This extracts the section name from the URL path first (most reliable),
+ * then falls back to H1 heading
+ * Returns "Front Page" if on homepage, or section name if on docs page
  */
 function getTextbookSectionName(): string {
-  if (typeof document === 'undefined') return 'General';
+  if (typeof document === 'undefined') return 'Front Page';
   
-  // Try to get the page title from various sources
+  const pathname = window.location.pathname;
+  
+  // Check if we're on a docs page (not homepage)
+  if (!pathname.startsWith('/docs/')) {
+    return 'Front Page'; // Homepage or other non-docs pages
+  }
+  
+  // Method 1: Get from URL path mapping (most reliable - matches backend exactly)
+  const match = pathname.match(/\/docs\/([^/]+)/);
+  if (match) {
+    const urlSlug = match[1].replace(/-ur$/, ''); // Remove -ur suffix if present
+    if (URL_TO_SECTION_NAME[urlSlug]) {
+      return URL_TO_SECTION_NAME[urlSlug];
+    }
+  }
+  
+  // Method 2: Get from the article H1 heading (fallback)
   const h1 = document.querySelector('article h1');
   if (h1?.textContent) {
     return h1.textContent.trim();
   }
   
+  // Method 3: Get from the page title (before the | separator)
   const title = document.title;
   if (title) {
     const parts = title.split('|');
     return parts[0].trim();
   }
   
-  const pathname = window.location.pathname;
-  const match = pathname.match(/\/docs\/([^/]+)/);
-  if (match) {
-    return match[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  }
-  
-  return 'General';
+  return 'Front Page';
 }
 
 export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [textbookName, setTextbookName] = useState<string>('');
 
-  // Update textbook name when widget opens
+  // Update textbook name when widget opens or URL changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const updateTextbookName = () => {
+        const name = getTextbookSectionName();
+        console.log('[ChatWidget] Extracted textbook name:', name);
+        setTextbookName(name);
+      };
+      
+      // Get initial name
+      updateTextbookName();
+      
+      // Listen for URL changes (for SPA navigation)
+      window.addEventListener('popstate', updateTextbookName);
+      
+      return () => {
+        window.removeEventListener('popstate', updateTextbookName);
+      };
+    }
+  }, []);
+
+  // Also update when widget opens
   useEffect(() => {
     if (isOpen && typeof window !== 'undefined') {
       setTextbookName(getTextbookSectionName());
     }
   }, [isOpen]);
 
-  // ChatKit Configuration - using correct property names
-  const chatKitOptions: ChatKitOptions = {
+  // Build API URL with textbook_name as query parameter
+  // Always pass textbook_name (either "Front Page" or section name)
+  const apiUrl = useMemo(() => {
+    const baseUrl = 'http://localhost:8000/chatkit';
+    if (textbookName && textbookName.trim()) {
+      return `${baseUrl}?textbook_name=${encodeURIComponent(textbookName)}`;
+    }
+    // Fallback to "Front Page" if somehow textbookName is empty
+    return `${baseUrl}?textbook_name=${encodeURIComponent('Front Page')}`;
+  }, [textbookName]);
+
+  // ChatKit Configuration - textbook_name passed via URL query parameter
+  const chatKitOptions: ChatKitOptions = useMemo(() => ({
     api: {
-      url: 'http://localhost:8000/chatkit',
+      url: apiUrl,
       domainKey: 'textbook-assistant',
     },
     theme: {
@@ -54,14 +108,19 @@ export default function ChatWidget() {
       radius: 'round',
       density: 'normal',
       color: {
-        grayscale: { hue: 123, tint: 0, shade: -2 },
-        accent: { primary: '#2e8555', level: 1 }, // Docusaurus primary color
-        surface: { background: '#f8f9fa', foreground: '#ffffff' }
+        accent: {
+          primary: '#181818',
+          level: 1
+        },
+        surface: {
+          background: '#ededed',
+          foreground: '#cfcfcf'
+        }
       },
       typography: {
         baseSize: 16,
-        fontFamily: '"OpenAI Sans", system-ui, sans-serif',
-        fontFamilyMono: 'ui-monospace, monospace',
+        fontFamily: '"OpenAI Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
+        fontFamilyMono: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace',
         fontSources: [
           {
             family: 'OpenAI Sans',
@@ -74,18 +133,16 @@ export default function ChatWidget() {
       }
     },
     composer: {
-      placeholder: `Ask about ${textbookName || 'this textbook'}...`,
-      attachments: { enabled: false },
+      placeholder: 'Talk with book',
+      attachments: {
+        enabled: false
+      },
     },
     startScreen: {
-      greeting: `Hi! I'm your Textbook AI Assistant for ${textbookName || 'Physical AI & Humanoid Robotics'}`,
-      prompts: [
-        { label: 'Explain concepts', prompt: 'Explain the main concepts of this section' },
-        { label: 'Summary', prompt: 'Give me a summary of this topic' },
-        { label: 'Key takeaways', prompt: 'What are the key takeaways?' },
-      ],
+      greeting: '',
+      prompts: [],
     },
-  };
+  }), [apiUrl]);
 
   const chatKit = useChatKit(chatKitOptions);
 

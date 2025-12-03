@@ -71,6 +71,12 @@ async def chat_with_agent(request: QueryRequest):
 
 # ============== OpenAI ChatKit Server ==============
 
+# Valid textbook sections available for chat
+VALID_TEXTBOOK_SECTIONS = [
+    "Introduction to Physical AI & Humanoid Robotics",
+    "Robot Operating System 2 (ROS2)"
+]
+
 if CHATKIT_AVAILABLE:
     
     class TextbookChatKitServer(ChatKitServer):
@@ -95,18 +101,65 @@ if CHATKIT_AVAILABLE:
                         user_query = content_block.text
                         break
             
-            # Get textbook name from context (passed via headers)
+            # Get textbook name from context (passed via query parameter)
             textbook_name = None
             if context and isinstance(context, dict):
                 textbook_name = context.get('textbook_name')
             
+            # Normalize textbook_name for comparison (trim whitespace)
+            normalized_textbook_name = None
+            if textbook_name:
+                normalized_textbook_name = textbook_name.strip()
+            
+            # Debug logging
+            print(f"[ChatKit] User query: '{user_query}'")
+            print(f"[ChatKit] Received textbook_name: '{textbook_name}'")
+            print(f"[ChatKit] Normalized textbook_name: '{normalized_textbook_name}'")
+            print(f"[ChatKit] Valid sections: {VALID_TEXTBOOK_SECTIONS}")
+            
+            # Validate textbook_name if provided
+            if normalized_textbook_name:
+                # Check if textbook_name is in the valid list (exact match after normalization)
+                if normalized_textbook_name not in VALID_TEXTBOOK_SECTIONS:
+                    print(f"[ChatKit] ERROR: '{normalized_textbook_name}' not in valid sections!")
+                    # Return error message for invalid textbook section
+                    error_message = (
+                        "I apologize, but the website is currently under development. "
+                        "Chat functionality is only available for the following sections:\n\n"
+                        "1. Introduction to Physical AI & Humanoid Robotics\n"
+                        "2. Robot Operating System 2 (ROS2)\n\n"
+                        "Please navigate to one of these sections to use the chat feature."
+                    )
+                    
+                    # Create assistant message with error
+                    msg_id = f"msg_{uuid.uuid4().hex[:12]}"
+                    content_block = AssistantMessageContent(
+                        type="output_text", 
+                        text=error_message
+                    )
+                    assistant_msg = AssistantMessageItem(
+                        id=msg_id,
+                        thread_id=thread.id,
+                        created_at=datetime.now(),
+                        type="assistant_message",
+                        content=[content_block]
+                    )
+                    
+                    # Yield events for ChatKit protocol
+                    yield ThreadItemAddedEvent(type="thread.item.added", item=assistant_msg)
+                    yield ThreadItemDoneEvent(type="thread.item.done", item=assistant_msg)
+                    return
+                else:
+                    print(f"[ChatKit] SUCCESS: '{normalized_textbook_name}' is valid!")
+            
             # Call our Textbook Agent
             try:
-                if textbook_name:
-                    full_query = f"{user_query} --textbook {textbook_name}"
+                if normalized_textbook_name:
+                    full_query = f"{user_query} --textbook {normalized_textbook_name}"
                 else:
                     full_query = user_query
                     
+                print(f"[ChatKit] Calling agent with query: '{full_query}'")
                 agent_response = await run_agent_async(full_query)
             except Exception as e:
                 agent_response = f"I apologize, but I encountered an error: {str(e)}. Please try again."
@@ -140,12 +193,31 @@ if CHATKIT_AVAILABLE:
         """
         OpenAI ChatKit API endpoint.
         This is the pure ChatKit protocol endpoint that the ChatKit widget connects to.
+        
+        Textbook name can be passed via:
+        1. X-Textbook-Name header (primary method)
+        2. textbook_name query parameter (fallback)
         """
-        # Extract textbook name from custom header
+        from urllib.parse import unquote
+        
+        # Try to get textbook name from header first
         textbook_name = request.headers.get('X-Textbook-Name', '')
+        
+        # Fallback to query parameter
+        if not textbook_name:
+            textbook_name = request.query_params.get('textbook_name', '')
+        
+        # Decode URL-encoded name
         if textbook_name:
-            from urllib.parse import unquote
             textbook_name = unquote(textbook_name)
+        
+        # Log for debugging
+        print(f"[ChatKit] Received request - Textbook: '{textbook_name}'")
+        
+        # Validate textbook_name if provided
+        if textbook_name and textbook_name.strip():
+            if textbook_name not in VALID_TEXTBOOK_SECTIONS:
+                print(f"[ChatKit] WARNING: Invalid textbook_name received: '{textbook_name}'")
         
         # Create context with textbook info
         context = {'textbook_name': textbook_name} if textbook_name else None
