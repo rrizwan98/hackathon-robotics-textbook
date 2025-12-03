@@ -1,0 +1,1 @@
+& "C:\Program Files\Git\bin\bash.exe" ".specify/scripts/bash/create-new-feature.sh" "--json" "--number" "1" "--short-name" "textbook-ai-portal" "--file" ".gemini\tmp\feature_description.md" > ".gemini\tmp\create_feature_stdout.log" 2> ".gemini\tmp\create_feature_stderr.log"
