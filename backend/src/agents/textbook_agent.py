@@ -12,8 +12,8 @@ This agent can:
 import os
 from dotenv import load_dotenv
 from agents import Agent, Runner, set_default_openai_client
-from agents.extensions.models.litellm_model import LitellmModel
 from openai import AsyncOpenAI
+from agents.extensions.models.litellm_model import LitellmModel
 
 import litellm
 
@@ -57,7 +57,6 @@ Guidelines:
 - When users ask what textbooks are available, use the list_available_textbooks tool
 - When users ask for a summary of a textbook, use the get_textbook_summary tool
 - Always be helpful, accurate, and educational in your responses
-- IMPORTANT: Keep your responses concise and in one line when possible to avoid quote extension issues
 - If you're not sure about something, say so and suggest using the textbook tools for accurate information
 
 Available Topics in Textbooks:
