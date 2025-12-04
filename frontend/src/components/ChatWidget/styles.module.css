@@ -7,13 +7,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  background: linear-gradient(135deg, #2e8555 0%, #25c2a0 100%);
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: white;
   border-radius: 50px;
   padding: 14px 20px;
   border: none;
   cursor: pointer;
-  box-shadow: 0 4px 20px rgba(46, 133, 85, 0.4);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
   transition: all 0.3s ease;
   font-family: system-ui, -apple-system, sans-serif;
   font-weight: 600;
@@ -22,61 +22,148 @@
 
 .chatButton:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 25px rgba(46, 133, 85, 0.5);
+  box-shadow: 0 6px 25px rgba(99, 102, 241, 0.5);
 }
 
 .chatButtonLabel {
   display: inline;
 }
 
-/* Pure OpenAI ChatKit Container */
-.chatKitContainer {
+/* Main Widget Container */
+.widgetContainer {
   position: fixed;
   bottom: 24px;
   right: 24px;
   z-index: 9999;
-  width: 400px;
+  width: 420px;
   height: 650px;
-  border-radius: 16px;
+  border-radius: 20px;
   overflow: hidden;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  background: white;
+  box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.35);
   display: flex;
-  flex-direction: column;
+  background: #ffffff;
 }
 
-/* Close Button - positioned above ChatKit */
-.closeButton {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 10001;
-  background-color: rgba(55, 65, 81, 0.9);
+/* Chat Area */
+.chatArea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: #ffffff;
+}
+
+/* Chat Header */
+.chatHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  gap: 0.5rem;
+}
+
+.loginPromptBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: white;
-  border-radius: 50%;
-  padding: 8px;
   border: none;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
+  margin-right: auto;
+}
+
+.loginPromptBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.userSection {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-right: auto;
+}
+
+.userBadge {
+  display: flex;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.logoutBtn {
+  background: transparent;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s;
 }
 
-.closeButton:hover {
-  background-color: rgba(55, 65, 81, 1);
-  transform: scale(1.1);
+.logoutBtn:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+}
+
+.closeBtn:hover {
+  background: #e9ecef;
+  color: #374151;
+}
+
+/* ChatKit Wrapper */
+.chatKitWrapper {
+  flex: 1;
+  overflow: hidden;
 }
 
 /* Responsive adjustments */
-@media (max-width: 480px) {
-  .chatKitContainer {
+@media (max-width: 768px) {
+  .widgetContainer {
     width: calc(100vw - 32px);
     height: calc(100vh - 100px);
     bottom: 16px;
     right: 16px;
+    border-radius: 16px;
   }
-  
+
+  .chatArea {
+    width: 100%;
+  }
+
   .chatButton {
     bottom: 16px;
     right: 16px;
@@ -89,11 +176,24 @@
 }
 
 /* Dark mode support */
-[data-theme='dark'] .chatKitContainer {
-  background: #1a1a1a;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+[data-theme='dark'] .chatArea {
+  background: #1e1e2e;
+}
+
+[data-theme='dark'] .chatHeader {
+  background: #252536;
+  border-bottom-color: #333;
+}
+
+[data-theme='dark'] .closeBtn {
+  color: #a0a0a0;
+}
+
+[data-theme='dark'] .closeBtn:hover {
+  background: #333;
+  color: #ffffff;
 }
 
 [data-theme='dark'] .chatButton {
-  background: linear-gradient(135deg, #25c2a0 0%, #2e8555 100%);
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
 }
