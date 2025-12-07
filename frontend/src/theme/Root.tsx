@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { AuthProvider } from '../contexts/AuthContext';
 import ChatWidget from '../components/ChatWidget';
 
 // Default Root component from Docusaurus with ChatKit integration
@@ -21,10 +22,10 @@ function Root({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <>
+    <AuthProvider>
       {children}
       <ChatWidget />
-    </>
+    </AuthProvider>
   );
 }
 

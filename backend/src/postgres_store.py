@@ -54,14 +54,34 @@ class PostgreSQLStore(Store[Any]):
     async def _create_tables(self) -> None:
         """Create the required database tables if they don't exist."""
         async with self.pool.acquire() as conn:
-            # Create threads table
+            # Create threads table with user_email for filtering
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS chat_threads (
                     id VARCHAR(255) PRIMARY KEY,
+                    user_email VARCHAR(255),
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                     metadata JSONB DEFAULT '{}'::jsonb
                 )
+            """)
+            
+            # Add user_email column if it doesn't exist (for existing tables)
+            await conn.execute("""
+                DO $$ 
+                BEGIN 
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name = 'chat_threads' AND column_name = 'user_email'
+                    ) THEN
+                        ALTER TABLE chat_threads ADD COLUMN user_email VARCHAR(255);
+                    END IF;
+                END $$;
+            """)
+            
+            # Create index for user email filtering
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_chat_threads_user_email 
+                ON chat_threads(user_email, created_at DESC)
             """)
             
             # Create items table
@@ -138,13 +158,20 @@ class PostgreSQLStore(Store[Any]):
             )
     
     async def save_thread(self, thread: ThreadMetadata, context: Any) -> None:
-        """Save or update a thread."""
+        """Save or update a thread with user_email from context."""
+        # Extract user_email from context if available
+        user_email = None
+        if context and hasattr(context, 'get'):
+            user_email = context.get('user_email')
+        elif isinstance(context, dict):
+            user_email = context.get('user_email')
+        
         async with self.pool.acquire() as conn:
             await conn.execute("""
-                INSERT INTO chat_threads (id, created_at, updated_at)
-                VALUES ($1, $2, $2)
-                ON CONFLICT (id) DO UPDATE SET updated_at = $2
-            """, thread.id, thread.created_at or datetime.now())
+                INSERT INTO chat_threads (id, user_email, created_at, updated_at)
+                VALUES ($1, $2, $3, $3)
+                ON CONFLICT (id) DO UPDATE SET updated_at = $3
+            """, thread.id, user_email, thread.created_at or datetime.now())
     
     async def delete_thread(self, thread_id: str, context: Any) -> None:
         """Delete a thread and all its items."""
@@ -161,9 +188,25 @@ class PostgreSQLStore(Store[Any]):
         order: str, 
         context: Any
     ) -> Page[ThreadMetadata]:
-        """Load multiple threads with pagination."""
+        """Load multiple threads with pagination, filtered by user_email if provided."""
+        # Extract user_email from context for filtering
+        user_email = None
+        if context and hasattr(context, 'get'):
+            user_email = context.get('user_email')
+        elif isinstance(context, dict):
+            user_email = context.get('user_email')
+        
         async with self.pool.acquire() as conn:
             order_dir = "DESC" if order == "desc" else "ASC"
+            
+            # Build WHERE clause based on user_email
+            if user_email:
+                user_filter = "user_email = $1"
+                base_params = [user_email]
+            else:
+                # If no user_email, show threads with no user (anonymous) or all threads
+                user_filter = "(user_email IS NULL OR user_email = '')"
+                base_params = []
             
             if after:
                 # Get the created_at of the 'after' thread
@@ -172,28 +215,54 @@ class PostgreSQLStore(Store[Any]):
                     after
                 )
                 if after_row:
+                    param_offset = len(base_params) + 1
                     if order == "desc":
-                        rows = await conn.fetch(f"""
-                            SELECT * FROM chat_threads 
-                            WHERE created_at < $1
-                            ORDER BY created_at {order_dir}
-                            LIMIT $2
-                        """, after_row['created_at'], limit + 1)
+                        if user_email:
+                            rows = await conn.fetch(f"""
+                                SELECT * FROM chat_threads 
+                                WHERE {user_filter} AND created_at < ${param_offset}
+                                ORDER BY created_at {order_dir}
+                                LIMIT ${param_offset + 1}
+                            """, *base_params, after_row['created_at'], limit + 1)
+                        else:
+                            rows = await conn.fetch(f"""
+                                SELECT * FROM chat_threads 
+                                WHERE {user_filter} AND created_at < $1
+                                ORDER BY created_at {order_dir}
+                                LIMIT $2
+                            """, after_row['created_at'], limit + 1)
                     else:
-                        rows = await conn.fetch(f"""
-                            SELECT * FROM chat_threads 
-                            WHERE created_at > $1
-                            ORDER BY created_at {order_dir}
-                            LIMIT $2
-                        """, after_row['created_at'], limit + 1)
+                        if user_email:
+                            rows = await conn.fetch(f"""
+                                SELECT * FROM chat_threads 
+                                WHERE {user_filter} AND created_at > ${param_offset}
+                                ORDER BY created_at {order_dir}
+                                LIMIT ${param_offset + 1}
+                            """, *base_params, after_row['created_at'], limit + 1)
+                        else:
+                            rows = await conn.fetch(f"""
+                                SELECT * FROM chat_threads 
+                                WHERE {user_filter} AND created_at > $1
+                                ORDER BY created_at {order_dir}
+                                LIMIT $2
+                            """, after_row['created_at'], limit + 1)
                 else:
                     rows = []
             else:
-                rows = await conn.fetch(f"""
-                    SELECT * FROM chat_threads 
-                    ORDER BY created_at {order_dir}
-                    LIMIT $1
-                """, limit + 1)
+                if user_email:
+                    rows = await conn.fetch(f"""
+                        SELECT * FROM chat_threads 
+                        WHERE {user_filter}
+                        ORDER BY created_at {order_dir}
+                        LIMIT $2
+                    """, user_email, limit + 1)
+                else:
+                    rows = await conn.fetch(f"""
+                        SELECT * FROM chat_threads 
+                        WHERE {user_filter}
+                        ORDER BY created_at {order_dir}
+                        LIMIT $1
+                    """, limit + 1)
             
             has_more = len(rows) > limit
             threads = [
